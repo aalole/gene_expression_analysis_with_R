@@ -1,0 +1,85 @@
+---
+title: "Differential analysis using EdgeR "
+output: html_notebook
+AUthor: Mikail Rasheed
+Date: 11/03/2023
+Course Code: Binf694
+---
+
+
+# MDS plot
+```{r}
+cancer_counts <- read.table(file="oral_carcinoma_counts.txt", sep = "\t", header = T)
+head(cancer_counts)
+convert_to_DGE_list <- DGEList(counts=cancer_counts[,3:8], genes=cancer_counts[,1:2])
+##BiocManager::install("edgeR")
+rownames(convert_to_DGE_list$counts) <- rownames(convert_to_DGE_list$genes) <- convert_to_DGE_list$genes$EntrezGene
+
+convert_to_DGE_list$genes$EntrezGene <- NULL
+
+## calculate scaling factor
+sf <- calcNormFactors(convert_to_DGE_list)
+
+sf$samples$group = c("N", "T", "N", "T", "N", "T")
+
+# MDS plot
+plotMDS(sf)
+```
+
+## BCV plot
+```{r}
+sf <- estimateDisp(sf)
+sf$common.dispersion
+#Creating a BCV Plot
+plotBCV(sf)
+```
+
+
+## Smear plot
+```{r}
+#exact test for differential expression
+et <- exactTest(sf, pair=c("N","T"))
+
+summary(de <- decideTestsDGE(et))
+#D. Visualizing Differentially Expressed Genes
+detags <- rownames(sf)[as.logical(de)]
+plotSmear(et, de.tags=detags)
+abline(h=c(-1, 1), col="blue")
+```
+
+```{r}
+##Viewing a List of Differentially Expressed Genes
+diffExpGenes <- topTags(et, n=1000, p.value = 0.05)
+```
+
+## Design matrix
+```{r}
+Patient <- factor(c(8,8,33,33,51,51))
+Tissue <- factor(c("N","T","N","T","N","T"))
+design <- model.matrix(~Patient+Tissue)
+rownames(design) <- colnames(sf)
+design
+```
+## Smear plot (generalized linear model)
+
+```{r}
+#B. Calculating the Dispersion
+disp_calc <- sf
+disp_calc <- estimateDisp(disp_calc, design, robust=TRUE)
+
+
+#C. Differential Expression Analysis with the GLM
+
+fit <- glmFit(disp_calc, design)
+lrt <- glmLRT(fit, coef=4)
+summary(de2 <- decideTestsDGE(lrt))
+
+#plot of log fold change
+detags <- rownames(disp_calc)[as.logical(de2)]
+plotSmear(lrt, de.tags=detags)
+abline(h=c(-1, 1), col="blue")
+
+#D. Viewing a List of Differentially Expressed Genes in the GLM
+#diffExpGenes_glm <- topTags(lrt, n=1000, p.value = 0.05)
+#head(diffExpGenes_glm$table)
+```

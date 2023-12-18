@@ -1,0 +1,85 @@
+---
+title: "Project 1 First batch"
+output: html_notebook
+Author: Mikail Rasheed
+Start Date: 11/01/23
+---
+## Variable definition /Project start
+
+```{r}
+files<-c("brain_a.s_trimmed.sorted.count.txt","brain_3b.s_trimmed.sorted.count.txt","brain_3c.s_trimmed.sorted.count.txt","heart_5a.s_trimmed.sorted.count.txt","heart_5b.s_trimmed.sorted.count.txt","heart_6a.s_trimmed.sorted.count.txt")
+
+organs<-c("brain","brain","brain","heart","heart","heart")
+
+samples<-c("brain_a","brain_3b","brain_3c","heart_5a","heart_5b","heart_6a")
+
+```
+
+## create a DESeqDataSet in DESeq2 for PCA plots and heatmaps
+```{r}
+sampleTable<-data.frame(sampleName=samples, fileName=files, condition=organs)
+project_data1 <- DESeqDataSetFromHTSeqCount(sampleTable=sampleTable, design= ~ condition)
+```
+## Transforming the Dataset with rlog
+```{r}
+rlog_data <- rlog(project_data1, blind = FALSE)
+```
+## Creating Data heat map
+```{r}
+sampleDist <- dist(t(assay(rlog_data)))
+sampleDistMatrix <- as.matrix(sampleDist)
+#sampleDistMatrix
+colors <- colorRampPalette(rev(brewer.pal(7, "Greens")))(255)
+rownames(sampleDistMatrix) <- rownames(colData(rlog_data))
+colnames(sampleDistMatrix) <- rownames(colData(rlog_data))
+pheatmap(sampleDistMatrix, clustering_distance_rows = sampleDist, clustering_distance_cols = sampleDist, col=colors)
+```
+
+
+## Making PCA plot
+# Principal Component Analysis (PCA) is a method for reducing dimensionality of datasets to bring out differences among samples
+```{r}
+PCA_model <- plotPCA(rlog_data, intgroup = c("condition", "sizeFactor"))
+PCA_model
+```
+
+## Gene Heatmap
+```{r}
+geneVars <- rowVars(assay(rlog_data))
+geneVarsOrdered <- order(geneVars, decreasing = TRUE)
+topVarGenes <- head(geneVarsOrdered, 50)
+mat <- assay(rlog_data)[topVarGenes, ]
+mat <- mat - rowMeans(mat)
+df <- as.data.frame(colData(rlog_data)[, c("condition", "sizeFactor")])
+clear_col_names <- rownames(colData(rlog_data))
+paste(rownames(colData(rlog_data)), rlog_data$condition, sep = ".")
+top100_genes_heatmap <- pheatmap(mat, annotation_col = df, labels_col = clear_col_names)
+```
+
+
+## DGEList object in edgeR for differential expression analysis: Differential Expression analysis starts here
+```{r}
+project_data2 <-readDGE(files, group=organs, labels=samples)
+filtered_project_data2 <- project_data2[!rowSums(project_data2$count == 0), ]
+sf <- calcNormFactors(filtered_project_data2)
+plotMDS(sf)
+```
+## BCV plot
+```{r}
+sf <- estimateDisp(sf)
+sf$common.dispersion
+#Creating a BCV Plot
+plotBCV(sf)
+```
+## Smear plot
+```{r}
+et <- exactTest(sf, pair=c("brain","heart"))
+
+summary(de <- decideTestsDGE(et))
+#D. Visualizing Differentially Expressed Genes
+detags <- rownames(sf)[as.logical(de)]
+plotSmear(et, de.tags=detags)
+abline(h=c(-1, 1), col="green")
+```
+
+
